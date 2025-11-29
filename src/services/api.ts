@@ -16,7 +16,6 @@ export interface SensorReading {
     value: number;
     unit: string;
     timestamp: string;
-    location?: string;
 }
 
 export interface PagedResponse<T> {
@@ -38,25 +37,21 @@ export interface FilterParameters {
 }
 
 export const sensorApi = {
-    // Pobierz odczyty z filtrami
     getReadings: async (params: FilterParameters): Promise<PagedResponse<SensorReading>> => {
         const response = await api.get<PagedResponse<SensorReading>>('/sensors', { params });
         return response.data;
     },
 
-    // Pobierz odczyt po ID
     getReadingById: async (id: string): Promise<SensorReading> => {
         const response = await api.get<SensorReading>(`/sensors/${id}`);
         return response.data;
     },
 
-    // Pobierz typy czujników
     getSensorTypes: async (): Promise<string[]> => {
         const response = await api.get<string[]>('/sensors/sensor-types');
         return response.data;
     },
 
-    // Pobierz instancje czujników
     getSensorInstances: async (sensorType?: string): Promise<string[]> => {
         const response = await api.get<string[]>('/sensors/sensor-instances', {
             params: sensorType ? { sensorType } : {},
@@ -64,7 +59,6 @@ export const sensorApi = {
         return response.data;
     },
 
-    // Pobierz ostatnie N odczytów
     getLastReadings: async (sensorInstanceId: string, count: number = 100): Promise<SensorReading[]> => {
         const response = await api.get<SensorReading[]>(`/sensors/last/${sensorInstanceId}`, {
             params: { count },
@@ -72,7 +66,6 @@ export const sensorApi = {
         return response.data;
     },
 
-    // Pobierz średnią
     getAverage: async (sensorInstanceId: string, count: number = 100): Promise<{ sensorInstanceId: string; average: number; count: number }> => {
         const response = await api.get(`/sensors/average/${sensorInstanceId}`, {
             params: { count },
@@ -80,7 +73,6 @@ export const sensorApi = {
         return response.data;
     },
 
-    // Eksport do CSV
     exportToCsv: async (params: FilterParameters): Promise<Blob> => {
         const response = await api.get('/sensors/export/csv', {
             params,
@@ -89,7 +81,6 @@ export const sensorApi = {
         return response.data;
     },
 
-    // Eksport do JSON
     exportToJson: async (params: FilterParameters): Promise<Blob> => {
         const response = await api.get('/sensors/export/json', {
             params,
@@ -98,7 +89,6 @@ export const sensorApi = {
         return response.data;
     },
 
-    // Usuń wszystkie odczyty (tylko test)
     deleteAll: async (): Promise<void> => {
         await api.delete('/sensors/all');
     },

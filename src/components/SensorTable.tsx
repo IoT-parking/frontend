@@ -13,6 +13,7 @@ const SensorTable: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [sensorTypes, setSensorTypes] = useState<string[]>([]);
     const [sensorInstances, setSensorInstances] = useState<string[]>([]);
+    const [selectedInstance, setSelectedInstance] = useState<string | undefined>(undefined);
     const [pagination, setPagination] = useState({
         current: 1,
         pageSize: 10,
@@ -92,7 +93,19 @@ const SensorTable: React.FC = () => {
 
     const handleFilterChange = (key: string, value: any) => {
         const newFilters = { ...filters, [key]: value, pageNumber: 1 };
+        
+        // Reset sensor instance when sensor type changes
+        if (key === 'sensorType') {
+            setSelectedInstance(undefined);
+            delete newFilters.sensorInstanceId;
+        }
+        
         setFilters(newFilters);
+    };
+
+    const handleInstanceChange = (value: string | undefined) => {
+        setSelectedInstance(value);
+        handleFilterChange('sensorInstanceId', value);
     };
 
     const handleDateRangeChange = (dates: [Dayjs | null, Dayjs | null] | null) => {
@@ -173,12 +186,6 @@ const SensorTable: React.FC = () => {
             render: (timestamp: string) => dayjs(timestamp).format('YYYY-MM-DD HH:mm:ss'),
             defaultSortOrder: 'descend',
         },
-        {
-            title: 'Location',
-            dataIndex: 'location',
-            key: 'location',
-            render: (location: string | undefined) => location || '-',
-        },
     ];
 
     return (
@@ -203,7 +210,8 @@ const SensorTable: React.FC = () => {
                     style={{ width: 200 }}
                     placeholder="Filter by Instance"
                     allowClear
-                    onChange={(value) => handleFilterChange('sensorInstanceId', value)}
+                    value={selectedInstance}
+                    onChange={handleInstanceChange}
                     disabled={!sensorInstances.length}
                 >
                     {sensorInstances.map((instance) => (
@@ -214,9 +222,16 @@ const SensorTable: React.FC = () => {
                 </Select>
 
                 <RangePicker
-                    showTime
+                    showTime={{ format: 'HH:mm' }}
+                    format="YYYY-MM-DD HH:mm"
                     onChange={handleDateRangeChange}
-                    format="YYYY-MM-DD HH:mm:ss"
+                    presets={[
+                        { label: 'Last Hour', value: [dayjs().subtract(1, 'hour'), dayjs()] },
+                        { label: 'Last 24 Hours', value: [dayjs().subtract(24, 'hour'), dayjs()] },
+                        { label: 'Last 7 Days', value: [dayjs().subtract(7, 'day'), dayjs()] },
+                        { label: 'Last 30 Days', value: [dayjs().subtract(30, 'day'), dayjs()] },
+                        { label: 'This Month', value: [dayjs().startOf('month'), dayjs()] },
+                    ]}
                 />
 
                 <Button type="primary" icon={<ReloadOutlined />} onClick={() => fetchData()}>
