@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Card, Select, DatePicker, Button, Space, message, Row, Col } from 'antd';
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { ReloadOutlined } from '@ant-design/icons';
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
@@ -14,10 +14,13 @@ const Charts: React.FC = () => {
     const [loading, setLoading] = useState(false);
     const [sensorTypes, setSensorTypes] = useState<string[]>([]);
     const [sensorInstances, setSensorInstances] = useState<string[]>([]);
+    const [selectedInstance, setSelectedInstance] = useState<string | undefined>(undefined);
     const [filters, setFilters] = useState<FilterParameters>({
         pageSize: 1000,
         sortBy: 'Timestamp',
         sortDescending: false,
+        startDate: dayjs().subtract(10, 'minute').toISOString(),
+        endDate: dayjs().toISOString(),
     });
 
     useEffect(() => {
@@ -63,7 +66,18 @@ const Charts: React.FC = () => {
 
     const handleFilterChange = (key: string, value: any) => {
         const newFilters = { ...filters, [key]: value };
+        
+        if (key === 'sensorType') {
+            setSelectedInstance(undefined);
+            delete newFilters.sensorInstanceId;
+        }
+        
         setFilters(newFilters);
+    };
+
+    const handleInstanceChange = (value: string | undefined) => {
+        setSelectedInstance(value);
+        handleFilterChange('sensorInstanceId', value);
     };
 
     const handleDateRangeChange = (dates: [Dayjs | null, Dayjs | null] | null) => {
@@ -74,26 +88,38 @@ const Charts: React.FC = () => {
                 endDate: dates[1].toISOString(),
             });
         } else {
-            const newFilters = { ...filters };
-            delete newFilters.startDate;
-            delete newFilters.endDate;
-            setFilters(newFilters);
+            setFilters({
+                ...filters,
+                startDate: dayjs().subtract(10, 'minute').toISOString(),
+                endDate: dayjs().toISOString(),
+            });
         }
     };
 
-    const chartData = data.map((reading) => ({
-        timestamp: dayjs(reading.timestamp).format('HH:mm:ss'),
-        value: reading.value,
-        sensor: reading.sensorInstanceId,
-    }));
+    const sortedData = [...data].sort((a, b) => 
+        new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    );
 
-    const groupedBySensor = data.reduce((acc, reading) => {
+    const groupedBySensor = sortedData.reduce((acc, reading) => {
         if (!acc[reading.sensorInstanceId]) {
             acc[reading.sensorInstanceId] = [];
         }
         acc[reading.sensorInstanceId].push(reading);
         return acc;
     }, {} as Record<string, SensorReading[]>);
+
+    const timestampMap = new Map<string, any>();
+    
+    sortedData.forEach(reading => {
+        const timeKey = dayjs(reading.timestamp).format('HH:mm:ss');
+        if (!timestampMap.has(timeKey)) {
+            timestampMap.set(timeKey, { timestamp: timeKey });
+        }
+        const entry = timestampMap.get(timeKey)!;
+        entry[reading.sensorInstanceId] = reading.value;
+    });
+
+    const chartData = Array.from(timestampMap.values());
 
     const colors = ['#8884d8', '#82ca9d', '#ffc658', '#ff7c7c', '#a4de6c', '#d084d0'];
 
@@ -119,7 +145,8 @@ const Charts: React.FC = () => {
                     style={{ width: 200 }}
                     placeholder="Filter by Instance"
                     allowClear
-                    onChange={(value) => handleFilterChange('sensorInstanceId', value)}
+                    value={selectedInstance}
+                    onChange={handleInstanceChange}
                 >
                     {sensorInstances.map((instance) => (
                         <Option key={instance} value={instance}>
@@ -129,9 +156,16 @@ const Charts: React.FC = () => {
                 </Select>
 
                 <RangePicker
-                    showTime
+                    showTime={{ format: 'HH:mm' }}
+                    format="YYYY-MM-DD HH:mm"
                     onChange={handleDateRangeChange}
-                    format="YYYY-MM-DD HH:mm:ss"
+                    presets={[
+                        { label: 'Last Hour', value: [dayjs().subtract(1, 'hour'), dayjs()] },
+                        { label: 'Last 24 Hours', value: [dayjs().subtract(24, 'hour'), dayjs()] },
+                        { label: 'Last 7 Days', value: [dayjs().subtract(7, 'day'), dayjs()] },
+                        { label: 'Last 30 Days', value: [dayjs().subtract(30, 'day'), dayjs()] },
+                        { label: 'This Month', value: [dayjs().startOf('month'), dayjs()] },
+                    ]}
                 />
 
                 <Button type="primary" icon={<ReloadOutlined />} onClick={() => fetchData()} loading={loading}>
@@ -141,7 +175,7 @@ const Charts: React.FC = () => {
 
             <Row gutter={[16, 16]}>
                 <Col span={24}>
-                    <Card title="Sensor Values Over Time (Line Chart)" loading={loading}>
+                    <Card title="Sensor Values Over Time" loading={loading}>
                         <ResponsiveContainer width="100%" height={400}>
                             <LineChart data={chartData}>
                                 <CartesianGrid strokeDasharray="3 3" />
@@ -153,37 +187,13 @@ const Charts: React.FC = () => {
                                     <Line
                                         key={sensorId}
                                         type="monotone"
-                                        dataKey="value"
-                                        data={groupedBySensor[sensorId].map((r) => ({
-                                            timestamp: dayjs(r.timestamp).format('HH:mm:ss'),
-                                            value: r.value,
-                                        }))}
+                                        dataKey={sensorId}
                                         stroke={colors[index % colors.length]}
                                         name={sensorId}
+                                        connectNulls
                                     />
                                 ))}
                             </LineChart>
-                        </ResponsiveContainer>
-                    </Card>
-                </Col>
-
-                <Col span={24}>
-                    <Card title="Average Values by Sensor (Bar Chart)" loading={loading}>
-                        <ResponsiveContainer width="100%" height={400}>
-                            <BarChart
-                                data={Object.entries(groupedBySensor).map(([sensorId, readings]) => ({
-                                    sensor: sensorId,
-                                    average: readings.reduce((sum, r) => sum + r.value, 0) / readings.length,
-                                    count: readings.length,
-                                }))}
-                            >
-                                <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis dataKey="sensor" />
-                                <YAxis />
-                                <Tooltip />
-                                <Legend />
-                                <Bar dataKey="average" fill="#8884d8" name="Average Value" />
-                            </BarChart>
                         </ResponsiveContainer>
                     </Card>
                 </Col>

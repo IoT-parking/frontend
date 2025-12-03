@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Row, Col, Statistic, Spin, message } from 'antd';
-// import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { ThunderboltOutlined, FireOutlined, DashboardOutlined, ExperimentOutlined } from '@ant-design/icons';
+import { Card, Row, Col, Statistic, Spin, message, Badge, Space } from 'antd';
+import { ThunderboltOutlined, FireOutlined, DashboardOutlined, ExperimentOutlined, WifiOutlined } from '@ant-design/icons';
 import { sensorApi } from '../services/api';
+import { signalRService, type SensorReading } from '../services/signalRService';
 import dayjs from 'dayjs';
 
 interface SensorStats {
@@ -17,32 +17,42 @@ interface SensorStats {
 const LiveDashboard: React.FC = () => {
     const [stats, setStats] = useState<SensorStats[]>([]);
     const [loading, setLoading] = useState(true);
-    const [sensorInstances, setSensorInstances] = useState<string[]>([]);
+    const [connected, setConnected] = useState(false);
 
     useEffect(() => {
         initializeDashboard();
-        const interval = setInterval(updateDashboard, 1000);
-        return () => clearInterval(interval);
+        
+        return () => {
+            signalRService.stop();
+        };
     }, []);
 
     const initializeDashboard = async () => {
         try {
             const instances = await sensorApi.getSensorInstances();
-            setSensorInstances(instances);
-            await updateDashboard(instances);
+            await loadInitialData(instances);
+            
+            await signalRService.start();
+            setConnected(true);
+            
+            const unsubscribe = signalRService.onSensorReading(handleSensorReading);
+            
+            return () => {
+                unsubscribe();
+            };
         } catch (error) {
             message.error('Failed to initialize dashboard');
+            console.error(error);
         } finally {
             setLoading(false);
         }
     };
 
-    const updateDashboard = async (instances?: string[]) => {
-        const instancesToUpdate = instances || sensorInstances;
-        if (instancesToUpdate.length === 0) return;
+    const loadInitialData = async (instances: string[]) => {
+        if (instances.length === 0) return;
 
         try {
-            const statsPromises = instancesToUpdate.map(async (instanceId) => {
+            const statsPromises = instances.map(async (instanceId) => {
                 const [lastReadings, avgData] = await Promise.all([
                     sensorApi.getLastReadings(instanceId, 1),
                     sensorApi.getAverage(instanceId, 100),
@@ -65,7 +75,53 @@ const LiveDashboard: React.FC = () => {
             const results = await Promise.all(statsPromises);
             setStats(results.filter((s): s is SensorStats => s !== null));
         } catch (error) {
-            console.error('Failed to update dashboard:', error);
+            console.error('Failed to load initial data:', error);
+        }
+    };
+
+    const handleSensorReading = async (reading: SensorReading) => {
+        setStats(prevStats => {
+            const existingIndex = prevStats.findIndex(
+                s => s.instanceId === reading.sensorInstanceId
+            );
+
+            if (existingIndex >= 0) {
+                const updated = [...prevStats];
+                updated[existingIndex] = {
+                    ...updated[existingIndex],
+                    latestValue: reading.value,
+                    lastUpdated: reading.timestamp,
+                };
+                return updated;
+            } else {
+                fetchAverageForNewSensor(reading.sensorInstanceId);
+                return [
+                    ...prevStats,
+                    {
+                        instanceId: reading.sensorInstanceId,
+                        latestValue: reading.value,
+                        averageValue: reading.value,
+                        unit: reading.unit,
+                        type: reading.sensorType,
+                        lastUpdated: reading.timestamp,
+                    }
+                ];
+            }
+        });
+    };
+
+    const fetchAverageForNewSensor = async (instanceId: string) => {
+        try {
+            const avgData = await sensorApi.getAverage(instanceId, 100);
+            setStats(prevStats => 
+                prevStats.map(s => 
+                    s.instanceId === instanceId 
+                        ? { ...s, averageValue: avgData.average }
+                        : s
+                )
+            );
+        } catch (error) {
+            console.error('Failed to fetch average for new sensor:', error);
         }
     };
 
@@ -94,30 +150,42 @@ const LiveDashboard: React.FC = () => {
 
     return (
         <div style={{ padding: '24px' }}>
-            <h1>Live Sensor Dashboard</h1>
-            <p style={{ marginBottom: '24px', color: '#888' }}>
-                Real-time monitoring - Updates every second
-            </p>
+            <Space direction="vertical" size="large" style={{ width: '100%' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                        <h1 style={{ margin: 0 }}>Live Sensor Dashboard</h1>
+                    </div>
+                    <Badge 
+                        status={connected ? 'success' : 'error'} 
+                        text={
+                            <Space>
+                                <WifiOutlined />
+                                {connected ? 'Connected' : 'Disconnected'}
+                            </Space>
+                        }
+                    />
+                </div>
 
-            <Row gutter={[16, 16]}>
-                {stats.map((stat) => (
-                    <Col xs={24} sm={12} md={8} lg={6} key={stat.instanceId}>
-                        <Card>
-                            <Statistic
-                                title={stat.instanceId}
-                                value={stat.latestValue}
-                                precision={2}
-                                prefix={getIcon(stat.type)}
-                                suffix={stat.unit}
-                            />
-                            <div style={{ marginTop: '12px', fontSize: '12px', color: '#888' }}>
-                                <div>Avg (last 100): {stat.averageValue.toFixed(2)} {stat.unit}</div>
-                                <div>Updated: {dayjs(stat.lastUpdated).format('HH:mm:ss')}</div>
-                            </div>
-                        </Card>
-                    </Col>
-                ))}
-            </Row>
+                <Row gutter={[16, 16]}>
+                    {stats.map((stat) => (
+                        <Col xs={24} sm={12} md={8} lg={6} key={stat.instanceId}>
+                            <Card>
+                                <Statistic
+                                    title={stat.instanceId}
+                                    value={stat.latestValue}
+                                    precision={stat.unit === 'boolean' ? 0 : 2}
+                                    prefix={getIcon(stat.type)}
+                                    suffix={stat.unit === 'boolean' ? '' : stat.unit}
+                                />
+                                <div style={{ marginTop: '12px', fontSize: '12px', color: '#888' }}>
+                                    <div>Avg (last 100): {stat.averageValue.toFixed(2)} {stat.unit === 'boolean' ? '' : stat.unit}</div>
+                                    <div>Updated: {dayjs(stat.lastUpdated).format('HH:mm:ss')}</div>
+                                </div>
+                            </Card>
+                        </Col>
+                    ))}
+                </Row>
+            </Space>
         </div>
     );
 };
