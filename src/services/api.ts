@@ -94,4 +94,11 @@ export const sensorApi = {
     },
 };
 
+export const blockchainApi = {
+    getBalances: async (): Promise<Record<string, number>> => {
+        const response = await api.get<Record<string, number>>('/blockchain/balances');
+        return response.data;
+    }
+};
+
 export default api;
