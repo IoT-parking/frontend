@@ -18,6 +18,13 @@ export interface SensorReading {
     timestamp: string;
 }
 
+// Nowy interfejs dla danych z Blockchaina
+export interface SensorStatus {
+    sensorId: string;
+    wallet: string;
+    tokens: number;
+}
+
 export interface PagedResponse<T> {
     data: T[];
     pageNumber: number;
@@ -92,11 +99,9 @@ export const sensorApi = {
     deleteAll: async (): Promise<void> => {
         await api.delete('/sensors/all');
     },
-};
 
-export const blockchainApi = {
-    getBalances: async (): Promise<Record<string, number>> => {
-        const response = await api.get<Record<string, number>>('/blockchain/balances');
+    getSensorRewardsStatus: async (): Promise<SensorStatus[]> => {
+        const response = await api.get<SensorStatus[]>('/sensors/status');
         return response.data;
     }
 };
