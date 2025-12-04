@@ -18,7 +18,7 @@ export interface SensorReading {
     timestamp: string;
 }
 
-// Nowy interfejs dla danych z Blockchaina
+// Represents the status of sensor rewards on the blockchain
 export interface SensorStatus {
     sensorId: string;
     wallet: string;

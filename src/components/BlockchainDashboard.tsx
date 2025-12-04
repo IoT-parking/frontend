@@ -12,11 +12,11 @@ const BlockchainDashboard: React.FC = () => {
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
 
   const fetchData = async () => {
-    // Nie ustawiamy loading na true przy odświeżaniu w tle, żeby tabela nie migała
+    // We don't set loading to true during background refresh to avoid table flickering
     if (data.length === 0) setLoading(true);
     
     try {
-      // Pobieramy dane z Twojego nowego endpointu w C#
+      // Fetch data from your new C# endpoint
       const statuses = await sensorApi.getSensorRewardsStatus();
       setData(statuses);
       setLastUpdated(new Date());
@@ -97,7 +97,7 @@ const BlockchainDashboard: React.FC = () => {
 
       {error && <Alert message="Connection Error" description={error} type="error" showIcon style={{ marginBottom: '24px' }} />}
 
-      {/* Karty ze statystykami */}
+      {/* Stats cards */}
       <Row gutter={16} style={{ marginBottom: '24px' }}>
         <Col xs={24} sm={8}>
           <Card bordered={false} style={{ background: '#f6ffed', borderColor: '#b7eb8f' }}>
@@ -134,7 +134,7 @@ const BlockchainDashboard: React.FC = () => {
         </Col>
       </Row>
 
-      {/* Główna tabela */}
+      {/* Main table */}
       <Card 
         title={<><WalletOutlined /> Sensor Wallets Ledger</>}
         style={{ borderRadius: '8px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}
