@@ -18,6 +18,13 @@ export interface SensorReading {
     timestamp: string;
 }
 
+// Represents the status of sensor rewards on the blockchain
+export interface SensorStatus {
+    sensorId: string;
+    wallet: string;
+    tokens: number;
+}
+
 export interface PagedResponse<T> {
     data: T[];
     pageNumber: number;
@@ -92,6 +99,11 @@ export const sensorApi = {
     deleteAll: async (): Promise<void> => {
         await api.delete('/sensors/all');
     },
+
+    getSensorRewardsStatus: async (): Promise<SensorStatus[]> => {
+        const response = await api.get<SensorStatus[]>('/sensors/status');
+        return response.data;
+    }
 };
 
 export default api;
